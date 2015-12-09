@@ -59,7 +59,7 @@ mat_matrix = [[[0,0,0],
 			  [[0,0,0],
 			   [0,0,0],
 			   [0,0,0]]]
-subdiv = 3
+subdiv = 30
 #Subdivide the material matrix
 dims = np.shape(mat_matrix)
 new_mat_matrix = np.zeros(((dims[0]-2)*subdiv+2,(dims[1]-2)*subdiv+2,(dims[2]-2)*subdiv+2))
@@ -123,7 +123,7 @@ node_frame_map = np.zeros((subdiv,subdiv,subdiv,6))
 print(node_frame_map.shape)
 nodes,frames,node_frame_map = cuboct.from_material(mat_matrix,vox_pitch)
 
-strain = 0.025
+strain = 0.001
 strain_disp = subdiv*vox_pitch*strain
 #Constraint and load population
 constraints = []
@@ -199,7 +199,8 @@ else:
 tot_force = 0
 for constraint in constraints:
 	if constraint["value"] != 0:
-		tot_force = tot_force + C[constraint["node"]*6+constraint["DOF"]]
+		tot_force = tot_force + C[int(constraint["node"]*6+constraint["DOF"])]
+print(len(frames)*frame_props["d1"]*frame_props["d2"]*frame_props["Le"]/(subdiv*vox_pitch)**3)
 print(tot_force/(subdiv*subdiv*vox_pitch*vox_pitch)/strain)
 
 if global_args["debug_plot"]:
