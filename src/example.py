@@ -34,26 +34,8 @@ from math import *
 # 1's correspond to material being there
 # 0's correspond to no material
 
-'''
-size = 3
-
-size_x = size
-size_y = size
-size_z = size
-mat_matrix = []
-for i in range(0,size_x+2):
-	tempcol = []
-	for j in range(0,size_y+2):
-		tempdep = [1]*(size_z+1)
-		tempdep.append(0)
-		tempdep[0] = 0
-		if(i*j*(i-(size_x+1))*(j-(size_y+1)) == 0):
-			tempdep = [0]*(size_z+2)
-		tempcol.append(tempdep)
-	mat_matrix.append(tempcol)
-'''
 vals = []
-for subdiv in range(2,10,2):
+for subdiv in range(2,4,2):
 	zheightvals = []
 	for aspratio in range(1,2):
 		mat_matrix = [[[0,0,0],
@@ -109,18 +91,6 @@ for subdiv in range(2,10,2):
 					   "cross_section"  : 'rectangular',
 					   "roll": 0,
 					   "Le":0.56*vox_pitch}#1.0*vox_pitch/sqrt(2.0)} 
-		'''
-		frame_props = {"nu"  : 0.33, #poisson's ratio
-					   "d1"	 : 0.000564/subdiv, #m
-					   "th"	 : 0.000564/2.0/subdiv, #m
-					   "E"   :  116000000000, #N/m^2
-					   "G"   :   42000000000,  #N/m^2
-					   "rho" :  4420, #kg/m^3
-					   "beam_divisions" : 0,
-					   "cross_section"  : 'circular',
-					   "roll": 0,
-					   "Le":1.0*vox_pitch/sqrt(2.0)} 
-		'''
 
 		#Node Map Population
 		#Referencing the geometry-specific cuboct.py file. 
@@ -155,13 +125,6 @@ for subdiv in range(2,10,2):
 				constraints.append({'node':node_frame_map[x][y][zheight][5],'DOF':0, 'value':0})
 				constraints.append({'node':node_frame_map[x][y][zheight][5],'DOF':1, 'value':0})
 				constraints.append({'node':node_frame_map[x][y][zheight][5],'DOF':2, 'value':-strain_disp})
-				#constraints.append({'node':node_frame_map[x][y][subdiv][5],'DOF':3, 'value':0})
-				#constraints.append({'node':node_frame_map[x][y][subdiv][5],'DOF':4, 'value':0})
-				#constraints.append({'node':node_frame_map[x][y][subdiv][5],'DOF':5, 'value':0})
-				#constraints.append({'node':node_ids[5],'DOF':2, 'value':0})
-
-		#frames = cuboct.remove_frame([(int(size_x/2.0)+1,int(size_y/2.0)+1,int(size_z/2.0)+1),2],node_frame_map,frames)
-		#dframes = cuboct.remove_frame([(int(size_x/2.0)+1,int(size_y/2.0)+1,int(size_z/2.0)+1),5],node_frame_map,dframes)
 
 
 
@@ -193,7 +156,7 @@ for subdiv in range(2,10,2):
 		out_nodes = np.array(nodes)
 
 		#Global Arguments 
-		global_args = {'frame3dd_filename': "test", 'length_scaling':1,"using_Frame3dd":False,"debug_plot":True, "gravity" : [0,0,0]}
+		global_args = {'frame3dd_filename': "test", "lump": False, 'length_scaling':1,"using_Frame3dd":False,"debug_plot":True, "gravity" : [0,0,0],"save_matrices":True}
 
 		if global_args["using_Frame3dd"]:
 			frame3dd.write_frame3dd_file(out_nodes, global_args, out_frames, constraints,loads)
@@ -255,14 +218,6 @@ if global_args["debug_plot"]:
 
 		ax.plot([start[0],end[0]],[start[1],end[1]],[start[2],end[2]],color='r', alpha=0.1)
 		ax.plot([rstart[0],rend[0]],[rstart[1],rend[1]],[rstart[2],rend[2]],color='b', alpha=0.5)#(1.0*st_nrg[i]/qmax)**2)
-	'''
-	for dframe in dframes:
-		nid1 = int(dframe[0])
-		nid2 = int(dframe[1])
-		dstart = [dxs[nid1],rys[nid1],rzs[nid1]]
-		dend   = [dxs[nid2],rys[nid2],rzs[nid2]]
-		ax.plot([dstart[0],dend[0]],[dstart[1],dend[1]],[dstart[2],dend[2]],color='b', alpha=0.1)
-	'''	
 
 	#ax.scatter(xs,ys,zs, color='r',alpha=0.1)
 	ax.scatter(rxs,rys,rzs, color='b',alpha=0.3)
