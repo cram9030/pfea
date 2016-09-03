@@ -11,6 +11,7 @@ import numpy as np
 from pfeautil import *
 from math import *
 import scipy as sp
+import eig
 
 #The sparse solver
 import cvxopt as co
@@ -337,6 +338,287 @@ def pop_k(beam_props):
 
 	return data,rows,cols
 
+def write_K(nodes,beam_sets,Q,global_args):
+        '''
+        This function writes the stiffness matrix to an text file
+        # Nodes is all the nodes
+	# Q is the internal pre-load forces
+	# Beam_sets is a list of tuples (beams, properties)
+	# 	beams is an n-by-2 array consisting of node indices
+	# 	properties is a dictionary listing the corresponding
+	#	parameters for the beams in the tuple
+	# Args is a dictionary consisting of the simulation parameters
+	# Key:
+	#	Shear 	: are we considering shear here
+	#	dof 	: the numbers of degrees of freedom
+	#	nE 		: the number of beam elements
+        '''
+        try: 
+		length_scaling = global_args['length_scaling']
+	except(KeyError): 
+		length_scaling = 1.
+		
+	tot_dof = len(nodes)*6
+        nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))
+        nodes = nodes*length_scaling
+        K = co.spmatrix([],[],[],(tot_dof,tot_dof))
+	Q = co.matrix(0.0,(nE,12))
+	K = assemble_K(nodes,beam_sets,Q,global_args)
+	Kdense = np.zeros((tot_dof,tot_dof))
+
+	for i in range(0,tot_dof):
+                for j in range(0,tot_dof):
+                        Kdense[i][j] = K[i*(j+1)+i]
+
+        np.savetxt('K.txt',Kdense,delimiter=',')
+
+#     #      #     #    #    ####### ######  ### #     # 
+##   ##      ##   ##   # #      #    #     #  #   #   #  
+# # # #      # # # #  #   #     #    #     #  #    # #   
+#  #  #      #  #  # #     #    #    ######   #     #    
+#     #      #     # #######    #    #   #    #    # #   
+#     #      #     # #     #    #    #    #   #   #   #  
+#     #      #     # #     #    #    #     # ### #     # 
+
+# Functions related to the construction of the mass matrix M
+def assemble_M(nodes,beam_sets,Q,args):
+	'''
+	# Nodes is all the nodes
+	# Q is the internal pre-load forces
+	# Beam_sets is a list of tuples (beams, properties)
+	# 	beams is an n-by-2 array consisting of node indices
+	# 	properties is a dictionary listing the corresponding
+	#	parameters for the beams in the tuple
+	# Args is a dictionary consisting of the simulation parameters
+	# Key:
+	#	Shear 	: are we considering shear here
+	#	dof 	: the numbers of degrees of freedom
+	#	nE 		: the number of beam elements
+	#
+	# Note: extra node mass has not been added
+	'''
+
+	tot_dof = args["dof"]
+	M = co.spmatrix([],[],[],(tot_dof,tot_dof))
+	data = np.zeros((tot_dof*6*6*9,))
+	row = np.zeros((tot_dof*6*6*9,), dtype=np.int)
+	col = np.zeros((tot_dof*6*6*9,), dtype=np.int)
+	data2 = np.array([])
+	q_index = 0
+	dat_dex = 0
+	size = 18
+	for beamset,bargs in beam_sets:
+		#every beam set lists the physical properties
+		#associated with that beam
+		
+		#transfer those properties over
+		beam_props = {"Ax"		:bargs["Ax"],
+					  "Asy"		: bargs["Asy"],
+					  "Asz"		: bargs["Asz"],
+					  "G"		: bargs["G"],
+					  "E"		: bargs["E"],
+					  "J"		: bargs["J"],
+					  "Iy"		: bargs["Iy"],
+					  "Iz"		: bargs["Iz"],
+					  "p"		: bargs["roll"],
+					  "Le"		: bargs["Le"],
+					  "shear"	: True}
+		for beam in beamset:
+			#Positions of the endpoint nodes for this beam
+			xn1 = nodes[beam[0]]
+			xn2 = nodes[beam[1]]
+			beam_props["xn1"] = xn1
+			beam_props["xn2"] = xn2
+			
+			beam_props["T"]	  = -Q[q_index,0]
+			q_index = q_index+1
+			
+			if global_args['lump']:
+			    m = lumped_M(beam_props)
+			else:
+			    m = consistent_M(beam_props)
+			bi0 = 6*int(beam[0])
+			bi1 = 6*int(beam[1])
+			offsets = [[bi0,bi0],[bi1,bi0],[bi0,bi1],[bi1,bi1]]
+
+			for i in range(4):
+				mtmp = sp.sparse.coo_matrix(m)
+				trow = mtmp.row+offsets[i][0]
+				tcol = mtmp.col+offsets[i][1]
+				lendat = len(mtmp.data)
+				#data2 = np.append(data2,ktmp.data)
+				#row = np.append(row,trow)#ktmp.row+offsets[i][0])
+				#col = np.append(col,tcol)#ktmp.col+offsets[i][1])
+				data[dat_dex:dat_dex+lendat] = mtmp.data[:]
+				row[dat_dex:dat_dex+lendat] = trow[:]
+				col[dat_dex:dat_dex+lendat] = tcol[:]
+				dat_dex+=lendat
+	
+	#print(data[dat_dex*size:(dat_dex+1)*size])
+	data = data[:dat_dex]
+	row = row[:dat_dex]
+	col = col[:dat_dex]
+	M = co.spmatrix(data,col,row,(tot_dof,tot_dof))
+	return M
+
+#LUMPED_M - space frame elastic stiffness matrix in global coordinates
+
+def lumped_M(beam_props):
+	# beam_props is a dictionary with the following values
+	# xn1   : position vector for start node
+	# xn2	: position vector for end node
+	# Le    : Effective beam length (taking into account node diameter)
+	# Asy   : Effective area for shear effects, y direction
+	# Asz   : Effective area for shear effects, z direction
+	# G		: Shear modulus
+	# E 	: Elastic modulus
+	# J 	: Polar moment of inertia
+	# Iy 	: Bending moment of inertia, y direction
+	# Iz 	: bending moment of inertia, z direction
+	# p 	: The roll angle (radians)
+	# T 	: internal element end force
+
+	#Start by importing the beam properties
+	xn1 	= beam_props["xn1"]
+	xn2 	= beam_props["xn2"]
+	Le  	= beam_props["Le"]
+	Ax		= beam_props["Ax"]
+	Asy 	= beam_props["Asy"]
+	Asz 	= beam_props["Asz"]
+	G   	= beam_props["G"]
+	E   	= beam_props["E"]
+	J 		= beam_props["J"]
+	Iy 		= beam_props["Iy"]
+	Iz 		= beam_props["Iz"]
+	p 		= beam_props["p"]
+	rho     = beam_props['rho']
+
+	#initialize the output
+	m = np.zeros((12,12))
+	#define the transform between local and global coordinate frames
+	t = coord_trans(xn1,xn2,Le,p)
+	
+	beam_m = (rho*Ax*Le)/2.0
+	ry = rho*Iy*Le/2.0
+	rz = rho*Iz*Le/2.0
+	po = rho*Le*J/2.0
+	
+	m[1][1] = m[2][2] = m[3][3] = m[7][7] = m[8][8] = m[9][9] = beam_m
+	
+	m[4][4] = m[10][10] = po*t[1]*t[1] + ry*t[4]*t[4] + rz*t[7]*t[7];
+	m[5][5] = m[11][11] = po*t[2]*t[2] + ry*t[5]*t[5] + rz*t[8]*t[8];
+	m[6][6] = m[12][12] = po*t[3]*t[3] + ry*t[6]*t[6] + rz*t[9]*t[9];
+
+	m[4][5] = m[5][4] = m[10][11] = m[11][10] =po*t[1]*t[2] +ry*t[4]*t[5] +rz*t[7]*t[8];
+	m[4][6] = m[6][4] = m[10][12] = m[12][10] =po*t[1]*t[3] +ry*t[4]*t[6] +rz*t[7]*t[9];
+	m[5][6] = m[6][5] = m[11][12] = m[12][11] =po*t[2]*t[3] +ry*t[5]*t[6] +rz*t[8]*t[9];
+	
+	return m
+	
+#CONSISTENT_M - space frame elastic stiffness matrix in global coordinates
+
+def consistent_M(beam_props):
+    # beam_props is a dictionary with the following values
+	# xn1   : position vector for start node
+	# xn2	: position vector for end node
+	# Le    : Effective beam length (taking into account node diameter)
+	# Asy   : Effective area for shear effects, y direction
+	# Asz   : Effective area for shear effects, z direction
+	# G		: Shear modulus
+	# E 	: Elastic modulus
+	# J 	: Polar moment of inertia
+	# Iy 	: Bending moment of inertia, y direction
+	# Iz 	: bending moment of inertia, z direction
+	# p 	: The roll angle (radians)
+	# T 	: internal element end force
+
+	#Start by importing the beam properties
+	xn1 	= beam_props["xn1"]
+	xn2 	= beam_props["xn2"]
+	Le  	= beam_props["Le"]
+	Ax		= beam_props["Ax"]
+	Asy 	= beam_props["Asy"]
+	Asz 	= beam_props["Asz"]
+	G   	= beam_props["G"]
+	E   	= beam_props["E"]
+	J 		= beam_props["J"]
+	Iy 		= beam_props["Iy"]
+	Iz 		= beam_props["Iz"]
+	p 		= beam_props["p"]
+	rho     = beam_props['rho']
+
+	#initialize the output
+	m = np.zeros((12,12))
+	#define the transform between local and global coordinate frames
+	t = coord_trans(xn1,xn2,Le,p)
+	
+	beam_m = (rho*Ax*Le)
+	ry = rho*Iy*Le
+	rz = rho*Iz*Le
+	po = rho*Le*J
+	
+	m[1][1]  = m[7][7]   = beam_m/3.0
+	m[2][2]  = m[8][8]   = 13.0*beam_m/35.0 + 6.0*rz/(5.0*L)
+	m[3][3]  = m[9][9]   = 13.0*beam_m/35.0 + 6.0*ry/(5.0*L)
+	m[4][4]  = m[10][10] = po/3.0
+	m[5][5]  = m[11][11] = beam_m*L*L/105.0 + 2.0*L*ry/15.0
+	m[6][6]  = m[12][12] = beam_m*L*L/105.0 + 2.0*L*rz/15.0
+
+	m[5][3]  = m[3][5]   = -11.0*beam_m*L/210.0 - ry/10.0
+	m[6][2]  = m[2][6]   =  11.0*beam_m*L/210.0 + rz/10.0
+	m[7][1]  = m[1][7]   =  beam_m/6.0
+
+	m[8][6]  = m[6][8]   =  13.0*beam_m*L/420.0 - rz/10.0
+	m[9][5]  = m[5][9]   = -13.0*beam_m*L/420.0 + ry/10.0
+	m[10][4] = m[4][10]  =  po/6.0 
+	m[11][3] = m[3][11]  =  13.0*beam_m*L/420.0 - ry/10.0
+	m[12][2] = m[2][12]  = -13.0*beam_m*L/420.0 + rz/10.0
+
+	m[11][9] = m[9][11]  =  11.0*beam_m*L/210.0 + ry/10.0
+	m[12][8] = m[8][12]  = -11.0*beam_m*L/210.0 - rz/10.0
+
+	m[8][2]  = m[2][8]   =  9.0*beam_m/70.0 - 6.0*rz/(5.0*L)
+	m[9][3]  = m[3][9]   =  9.0*beam_m/70.0 - 6.0*ry/(5.0*L)
+	m[11][5] = m[5][11]  = -L*L*beam_m/140.0 - ry*L/30.0
+	m[12][6] = m[6][12]  = -L*L*beam_m/140.0 - rz*L/30.0
+	
+	m = atma(t,m)
+	
+	return m
+
+def write_M(nodes,beam_sets,Q,global_args):
+        '''
+        This function writes the stiffness matrix to an text file
+        # Nodes is all the nodes
+	# Q is the internal pre-load forces
+	# Beam_sets is a list of tuples (beams, properties)
+	# 	beams is an n-by-2 array consisting of node indices
+	# 	properties is a dictionary listing the corresponding
+	#	parameters for the beams in the tuple
+	# Args is a dictionary consisting of the simulation parameters
+	# Key:
+	#	Shear 	: are we considering shear here
+	#	dof 	: the numbers of degrees of freedom
+	#	nE 		: the number of beam elements
+        '''
+        try: 
+		length_scaling = global_args['length_scaling']
+	except(KeyError): 
+		length_scaling = 1.
+		
+	tot_dof = len(nodes)*6
+        nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))
+        nodes = nodes*length_scaling
+        M = co.spmatrix([],[],[],(tot_dof,tot_dof))
+	Q = co.matrix(0.0,(nE,12))
+	M = assemble_K(nodes,beam_sets,Q,global_args)
+	Mdense = np.zeros((tot_dof,tot_dof))
+
+	for i in range(0,tot_dof):
+                for j in range(0,tot_dof):
+                        Mdense[i][j] = M[i*(j+1)+i]
+
+        np.savetxt('M.txt',Mdense,delimiter=',')
 
  #####  ####### #       #     # ####### ######  
 #     # #     # #       #     # #       #     # 
@@ -927,12 +1209,13 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
 	for n in range(len(nodes)):
 		fin_node_disp[n:,] = np.array([D[n*6],D[n*6+1],D[n*6+2]])	
 	
+	if n_modes > 0:
+	    M = co.spmatrix([],[],[],(tot_dof,tot_dof))
+	    Q = co.matrix(0.0,(nE,12))
+	    M = assemble_K(nodes,beam_sets,Q,global_args)
+	    if global_args['m_Methods'] == 'subspace':
+	        w = eig.subspace()
+            elif global_args['m_Methods'] == 'stodola':
+                w = eig.stodola()
 
-	return fin_node_disp,C,Q
-
-
-
-
-
-
-
+	return w

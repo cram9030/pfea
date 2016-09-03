@@ -7,6 +7,9 @@ from scipy.sparse import csr_matrix
 import networkx as nx
 import itertools
 import cvxopt as co
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D
 
 '''
 def V3(x,y,z):
@@ -74,6 +77,54 @@ def line_plane_intersection(P0,N,l,l0=array([0,0,0])):
     return dot(P0-l0,N)/dot(l,N)
 
 '''
+def plotLattice(nodes,frames,res_displace,scale):
+    # Function to plot the intial lattice configuration
+    # and the final version of the lattice configuration
+    #
+    # Input:    nodes - Initial node location
+    #           frames - node frames
+    #           res_displace - displacement of nodes
+    #           scale - scaling parameter
+    
+    #intialize arrays
+    xs = []
+    ys = []
+    zs = []
+    
+    rxs = []
+    rys = []
+    rzs = []
+    
+    #create plot
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_aspect('equal')
+    frame_coords = []
+
+    #poplate x, y, and z start and displacement arrays
+    for i,node in enumerate(nodes):
+	xs.append(node[0])
+	ys.append(node[1])
+	zs.append(node[2])
+	rxs.append(node[0]+res_displace[i][0]*scale)
+	rys.append(node[1]+res_displace[i][1]*scale)
+	rzs.append(node[2]+res_displace[i][2]*scale)
+
+    # Add frame
+    for i,frame in enumerate(frames):
+	nid1 = int(frame[0])
+	nid2 = int(frame[1])
+	start = [xs[nid1],ys[nid1],zs[nid1]]
+	end   = [xs[nid2],ys[nid2],zs[nid2]]
+	rstart = [rxs[nid1],rys[nid1],rzs[nid1]]
+	rend   = [rxs[nid2],rys[nid2],rzs[nid2]]
+	ax.plot([start[0],end[0]],[start[1],end[1]],[start[2],end[2]],color='r', alpha=0.1)
+	ax.plot([rstart[0],rend[0]],[rstart[1],rend[1]],[rstart[2],rend[2]],color='b', alpha=0.3)
+
+    #plot
+    ax.scatter(xs,ys,zs, color='r',alpha=0.1)
+    ax.scatter(rxs,rys,rzs, color='b',alpha=0.3)
+    plt.show()
 
 def coord_trans(x_n1,x_n2,L,p):
     # Find the coordinate transform from local beam coords

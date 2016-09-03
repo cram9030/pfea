@@ -34,24 +34,6 @@ from math import *
 # 1's correspond to material being there
 # 0's correspond to no material
 
-'''
-size = 3
-
-size_x = size
-size_y = size
-size_z = size
-mat_matrix = []
-for i in range(0,size_x+2):
-	tempcol = []
-	for j in range(0,size_y+2):
-		tempdep = [1]*(size_z+1)
-		tempdep.append(0)
-		tempdep[0] = 0
-		if(i*j*(i-(size_x+1))*(j-(size_y+1)) == 0):
-			tempdep = [0]*(size_z+2)
-		tempcol.append(tempdep)
-	mat_matrix.append(tempcol)
-'''
 vals = []
 for subdiv in range(2,10,2):
 	zheightvals = []
