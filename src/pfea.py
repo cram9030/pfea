@@ -198,7 +198,14 @@ def elastic_K(beam_props):
 
 	# Check and enforce symmetry of the elastic stiffness matrix for the element
 	k = 0.5*(k+k.T)
-
+	'''
+	for i in range(12):
+		for j in range(i+1,12):
+			if(k[i][j]!=k[j][i]):
+				if(abs(1.0*k[i][j]/k[j][i]-1.0) > 1.0e-6 and (abs(1.0*k[i][j]/k[i][i]) > 1e-6 or abs(1.0*k[j][i]/k[i][i]) > 1e-6)):
+					print("Ke Not Symmetric")
+				k[i][j] = k[j][i] = 0.5 * ( k[i][j] + k[j][i] )
+	'''
 	return [k[:6,:6],k[6:,:6],k[:6,6:],k[6:,6:]]
 
 #GEOMETRIC_K - space frame geometric stiffness matrix, global coordnates
@@ -327,7 +334,43 @@ def pop_k(beam_props):
 	rows = np.array([0,1,2,3,4,5,5,4,2,1])
 	cols = np.array([0,1,2,3,4,5,1,2,4,5])
 	
+	
+
 	return data,rows,cols
+
+def write_K(nodes,beam_sets,Q,global_args):
+        '''
+        This function writes the stiffness matrix to an text file
+        # Nodes is all the nodes
+	# Q is the internal pre-load forces
+	# Beam_sets is a list of tuples (beams, properties)
+	# 	beams is an n-by-2 array consisting of node indices
+	# 	properties is a dictionary listing the corresponding
+	#	parameters for the beams in the tuple
+	# Args is a dictionary consisting of the simulation parameters
+	# Key:
+	#	Shear 	: are we considering shear here
+	#	dof 	: the numbers of degrees of freedom
+	#	nE 		: the number of beam elements
+        '''
+        try: 
+		length_scaling = global_args['length_scaling']
+	except(KeyError): 
+		length_scaling = 1.
+		
+	tot_dof = len(nodes)*6
+        nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))
+        nodes = nodes*length_scaling
+        K = co.spmatrix([],[],[],(tot_dof,tot_dof))
+	Q = co.matrix(0.0,(nE,12))
+	K = assemble_K(nodes,beam_sets,Q,global_args)
+	Kdense = np.zeros((tot_dof,tot_dof))
+
+	for i in range(0,tot_dof):
+                for j in range(0,tot_dof):
+                        Kdense[i][j] = K[i*(j+1)+i]
+
+        np.savetxt('K.txt',Kdense,delimiter=',')
 
 #     #      #     #    #    ####### ######  ### #     # 
 ##   ##      ##   ##   # #      #    #     #  #   #   #  
@@ -379,9 +422,7 @@ def assemble_M(nodes,beam_sets,Q,args):
 					  "Iz"		: bargs["Iz"],
 					  "p"		: bargs["roll"],
 					  "Le"		: bargs["Le"],
-					  "shear"	: True,
-					"rho"		: bargs["rho"]}
-
+					  "shear"	: True}
 		for beam in beamset:
 			#Positions of the endpoint nodes for this beam
 			xn1 = nodes[beam[0]]
@@ -462,15 +503,15 @@ def lumped_M(beam_props):
 	rz = rho*Iz*Le/2.0
 	po = rho*Le*J/2.0
 	
-	m[0][0] = m[1][1] = m[2][2] = m[6][6] = m[7][7] = m[8][8] = beam_m
+	m[1][1] = m[2][2] = m[3][3] = m[7][7] = m[8][8] = m[9][9] = beam_m
 	
-	m[3][3] = m[9][9] = po*t[0]*t[0] + ry*t[3]*t[3] + rz*t[6]*t[6];
 	m[4][4] = m[10][10] = po*t[1]*t[1] + ry*t[4]*t[4] + rz*t[7]*t[7];
 	m[5][5] = m[11][11] = po*t[2]*t[2] + ry*t[5]*t[5] + rz*t[8]*t[8];
+	m[6][6] = m[12][12] = po*t[3]*t[3] + ry*t[6]*t[6] + rz*t[9]*t[9];
 
-	m[3][4] = m[4][3] = m[9][10] = m[10][9] =po*t[0]*t[1] +ry*t[3]*t[4] +rz*t[6]*t[7];
-	m[3][5] = m[5][3] = m[9][11] = m[11][9] =po*t[0]*t[2] +ry*t[3]*t[5] +rz*t[6]*t[8];
 	m[4][5] = m[5][4] = m[10][11] = m[11][10] =po*t[1]*t[2] +ry*t[4]*t[5] +rz*t[7]*t[8];
+	m[4][6] = m[6][4] = m[10][12] = m[12][10] =po*t[1]*t[3] +ry*t[4]*t[6] +rz*t[7]*t[9];
+	m[5][6] = m[6][5] = m[11][12] = m[12][11] =po*t[2]*t[3] +ry*t[5]*t[6] +rz*t[8]*t[9];
 	
 	return m
 	
@@ -504,7 +545,7 @@ def consistent_M(beam_props):
 	Iy 		= beam_props["Iy"]
 	Iz 		= beam_props["Iz"]
 	p 		= beam_props["p"]
-	rho     = beam_props["rho"]
+	rho     = beam_props['rho']
 
 	#initialize the output
 	m = np.zeros((12,12))
@@ -516,34 +557,68 @@ def consistent_M(beam_props):
 	rz = rho*Iz*Le
 	po = rho*Le*J
 	
-	m[0][0]  = m[6][6]   = beam_m/3.0
-	m[1][1]  = m[7][7]   = 13.0*beam_m/35.0 + 6.0*rz/(5.0*Le)
-	m[2][2]  = m[8][8]   = 13.0*beam_m/35.0 + 6.0*ry/(5.0*Le)
-	m[3][3]  = m[9][9] = po/3.0
-	m[4][4]  = m[10][10] = beam_m*Le*Le/105.0 + 2.0*Le*ry/15.0
-	m[5][5]  = m[11][11] = beam_m*Le*Le/105.0 + 2.0*Le*rz/15.0
+	m[1][1]  = m[7][7]   = beam_m/3.0
+	m[2][2]  = m[8][8]   = 13.0*beam_m/35.0 + 6.0*rz/(5.0*L)
+	m[3][3]  = m[9][9]   = 13.0*beam_m/35.0 + 6.0*ry/(5.0*L)
+	m[4][4]  = m[10][10] = po/3.0
+	m[5][5]  = m[11][11] = beam_m*L*L/105.0 + 2.0*L*ry/15.0
+	m[6][6]  = m[12][12] = beam_m*L*L/105.0 + 2.0*L*rz/15.0
 
-	m[4][2]  = m[2][4]   = -11.0*beam_m*Le/210.0 - ry/10.0
-	m[5][1]  = m[1][5]   =  11.0*beam_m*Le/210.0 + rz/10.0
-	m[6][0]  = m[0][6]   =  beam_m/6.0
+	m[5][3]  = m[3][5]   = -11.0*beam_m*L/210.0 - ry/10.0
+	m[6][2]  = m[2][6]   =  11.0*beam_m*L/210.0 + rz/10.0
+	m[7][1]  = m[1][7]   =  beam_m/6.0
 
-	m[7][5]  = m[5][7]   =  13.0*beam_m*Le/420.0 - rz/10.0
-	m[8][4]  = m[4][8]   = -13.0*beam_m*Le/420.0 + ry/10.0
-	m[9][3] = m[3][9]  =  po/6.0 
-	m[10][2] = m[2][10]  =  13.0*beam_m*Le/420.0 - ry/10.0
-	m[11][1] = m[1][11]  = -13.0*beam_m*Le/420.0 + rz/10.0
+	m[8][6]  = m[6][8]   =  13.0*beam_m*L/420.0 - rz/10.0
+	m[9][5]  = m[5][9]   = -13.0*beam_m*L/420.0 + ry/10.0
+	m[10][4] = m[4][10]  =  po/6.0 
+	m[11][3] = m[3][11]  =  13.0*beam_m*L/420.0 - ry/10.0
+	m[12][2] = m[2][12]  = -13.0*beam_m*L/420.0 + rz/10.0
 
-	m[10][8] = m[8][10]  =  11.0*beam_m*Le/210.0 + ry/10.0
-	m[11][7] = m[7][11]  = -11.0*beam_m*Le/210.0 - rz/10.0
+	m[11][9] = m[9][11]  =  11.0*beam_m*L/210.0 + ry/10.0
+	m[12][8] = m[8][12]  = -11.0*beam_m*L/210.0 - rz/10.0
 
-	m[7][1]  = m[1][7]   =  9.0*beam_m/70.0 - 6.0*rz/(5.0*Le)
-	m[8][2]  = m[2][8]   =  9.0*beam_m/70.0 - 6.0*ry/(5.0*Le)
-	m[10][4] = m[4][10]  = -Le*Le*beam_m/140.0 - ry*Le/30.0
-	m[11][5] = m[5][11]  = -Le*Le*beam_m/140.0 - rz*Le/30.0
+	m[8][2]  = m[2][8]   =  9.0*beam_m/70.0 - 6.0*rz/(5.0*L)
+	m[9][3]  = m[3][9]   =  9.0*beam_m/70.0 - 6.0*ry/(5.0*L)
+	m[11][5] = m[5][11]  = -L*L*beam_m/140.0 - ry*L/30.0
+	m[12][6] = m[6][12]  = -L*L*beam_m/140.0 - rz*L/30.0
 	
 	m = atma(t,m)
 	
 	return m
+
+def write_M(nodes,beam_sets,Q,global_args):
+        '''
+        This function writes the stiffness matrix to an text file
+        # Nodes is all the nodes
+	# Q is the internal pre-load forces
+	# Beam_sets is a list of tuples (beams, properties)
+	# 	beams is an n-by-2 array consisting of node indices
+	# 	properties is a dictionary listing the corresponding
+	#	parameters for the beams in the tuple
+	# Args is a dictionary consisting of the simulation parameters
+	# Key:
+	#	Shear 	: are we considering shear here
+	#	dof 	: the numbers of degrees of freedom
+	#	nE 		: the number of beam elements
+        '''
+        try: 
+		length_scaling = global_args['length_scaling']
+	except(KeyError): 
+		length_scaling = 1.
+		
+	tot_dof = len(nodes)*6
+        nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))
+        nodes = nodes*length_scaling
+        M = co.spmatrix([],[],[],(tot_dof,tot_dof))
+	Q = co.matrix(0.0,(nE,12))
+	M = assemble_K(nodes,beam_sets,Q,global_args)
+	Mdense = np.zeros((tot_dof,tot_dof))
+
+	for i in range(0,tot_dof):
+                for j in range(0,tot_dof):
+                        Mdense[i][j] = M[i*(j+1)+i]
+
+        np.savetxt('M.txt',Mdense,delimiter=',')
 
  #####  ####### #       #     # ####### ######  
 #     # #     # #       #     # #       #     # 
@@ -588,6 +663,14 @@ def solve_system(K,nodemap,D,forces,con_dof):
 	[xq,xr] = [D[:spl_dex],D[spl_dex:]]#np.split(D,[spl_dex])
 	[fq,fr] = [forces[:spl_dex],forces[spl_dex:]]#np.split(forces,[spl_dex])
 	
+	#xq = co.matrix(xq)
+	#xr = co.matrix(xr)
+	#fq = co.matrix(fq)
+	#fr = co.matrix(fr)
+	#Now we want to solve the equation
+	# Kqq xq + Kqr xr = fq
+	#print(size(co.matrix(Kqr,Kqr.size)))
+	#Kqr = co.matrix(Kqr,Kqr.size)
 	Kqr_xr = Kqr*xr
 	b = fq-Kqr_xr
 	#print(b,fq,Kqr_xr,Kqq)
@@ -720,6 +803,7 @@ def element_end_forces(nodes,Q,beam_sets,D):
 			beam_props["xn1"] = xn1
 			beam_props["xn2"] = xn2
 
+			#beam_props["Le"]  = sqrt((xn2[0]-xn1[0])**2+(xn2[1]-xn1[1])**2+(xn2[2]-xn1[2])**2) 
 			#Things that are not faster than the above:
 			#   sp.spatial.distance.euclidean(xn2,xn1)
 			#beam_props["eqF_mech"] = Null
@@ -1007,10 +1091,6 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
 		node_radius = global_args['node_radius']*length_scaling 
 	except(KeyError):
 		node_radius=np.zeros(np.shape(nodes)[0])
-	try:
-		saveMatrices = global_args['save_matrices']
-	except(KeyError):
-		saveMatrices = False
 
 	nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))    
 	nodes = nodes*length_scaling
@@ -1137,8 +1217,6 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
 	        w = eig.subspace()
             elif global_args['m_Methods'] == 'stodola':
                 w = eig.stodola()
-	if saveMatrices:
-		Q = np.zeros((nE,12))
-		writeMatrices(nodes,beam_sets,Q,global_args)
 
-	return fin_node_disp,C,Q
+	return w
+>>>>>>> 029a410337850bf96e237f844a5af5d8754827b3
