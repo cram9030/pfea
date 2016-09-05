@@ -34,9 +34,9 @@ import os
 vox_pitch = 0.0762 #m
                                                                                 
 #Setting up a 2 by 2 by 5
-size_x = 1;
-size_y = 1;
-size_z = 1;
+size_x = 2;
+size_y = 2;
+size_z = 5;
 
 #Temporary Material Matrix - NxNxN cubic grid (corresponding to cubic-octahedra)
 # at the moment:
