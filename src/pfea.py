@@ -84,6 +84,7 @@ def assemble_K(nodes,beam_sets,Q,args):
 
 			ke = elastic_K(beam_props)
 			kg = geometric_K(beam_props)
+
 			bi0 = 6*int(beam[0])
 			bi1 = 6*int(beam[1])
 			offsets = [[bi0,bi0],[bi1,bi0],[bi0,bi1],[bi1,bi1]]
@@ -338,7 +339,7 @@ def pop_k(beam_props):
 
 	return data,rows,cols
 
-def write_K(nodes,beam_sets,Q,global_args):
+def write_K(nodes,beam_sets,global_args):
         '''
         This function writes the stiffness matrix to an text file
         # Nodes is all the nodes
@@ -360,7 +361,8 @@ def write_K(nodes,beam_sets,Q,global_args):
 		
 	tot_dof = len(nodes)*6
         nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))
-        nodes = nodes*length_scaling
+        nodes = nodes*length_scaling	
+	global_args["dof"] = tot_dof
         K = co.spmatrix([],[],[],(tot_dof,tot_dof))
 	Q = co.matrix(0.0,(nE,12))
 	K = assemble_K(nodes,beam_sets,Q,global_args)
@@ -412,17 +414,19 @@ def assemble_M(nodes,beam_sets,Q,args):
 		#associated with that beam
 		
 		#transfer those properties over
-		beam_props = {"Ax"		:bargs["Ax"],
-					  "Asy"		: bargs["Asy"],
-					  "Asz"		: bargs["Asz"],
-					  "G"		: bargs["G"],
-					  "E"		: bargs["E"],
-					  "J"		: bargs["J"],
-					  "Iy"		: bargs["Iy"],
-					  "Iz"		: bargs["Iz"],
-					  "p"		: bargs["roll"],
-					  "Le"		: bargs["Le"],
-					  "shear"	: True}
+		beam_props = {"Ax"		: bargs["Ax"],
+                              "Asy"		: bargs["Asy"],
+                              "Asz"		: bargs["Asz"],
+                              "G"		: bargs["G"],
+                              "E"		: bargs["E"],
+                              "J"		: bargs["J"],
+                              "Iy"		: bargs["Iy"],
+                              "Iz"		: bargs["Iz"],
+                              "p"		: bargs["roll"],
+                              "Le"		: bargs["Le"],
+                              "shear"	        : True,
+                              "rho"		: bargs["rho"]}
+
 		for beam in beamset:
 			#Positions of the endpoint nodes for this beam
 			xn1 = nodes[beam[0]]
@@ -433,7 +437,7 @@ def assemble_M(nodes,beam_sets,Q,args):
 			beam_props["T"]	  = -Q[q_index,0]
 			q_index = q_index+1
 			
-			if global_args['lump']:
+			if args['lump']:
 			    m = lumped_M(beam_props)
 			else:
 			    m = consistent_M(beam_props)
@@ -442,7 +446,7 @@ def assemble_M(nodes,beam_sets,Q,args):
 			offsets = [[bi0,bi0],[bi1,bi0],[bi0,bi1],[bi1,bi1]]
 
 			for i in range(4):
-				mtmp = sp.sparse.coo_matrix(m)
+				mtmp = sp.sparse.coo_matrix(m[i])
 				trow = mtmp.row+offsets[i][0]
 				tcol = mtmp.col+offsets[i][1]
 				lendat = len(mtmp.data)
@@ -503,15 +507,15 @@ def lumped_M(beam_props):
 	rz = rho*Iz*Le/2.0
 	po = rho*Le*J/2.0
 	
-	m[1][1] = m[2][2] = m[3][3] = m[7][7] = m[8][8] = m[9][9] = beam_m
+	m[0][0] = m[1][1] = m[2][2] = m[6][6] = m[7][7] = m[8][8] = beam_m
 	
+	m[3][3] = m[9][9] = po*t[0]*t[0] + ry*t[3]*t[3] + rz*t[6]*t[6];
 	m[4][4] = m[10][10] = po*t[1]*t[1] + ry*t[4]*t[4] + rz*t[7]*t[7];
 	m[5][5] = m[11][11] = po*t[2]*t[2] + ry*t[5]*t[5] + rz*t[8]*t[8];
-	m[6][6] = m[12][12] = po*t[3]*t[3] + ry*t[6]*t[6] + rz*t[9]*t[9];
 
+	m[3][4] = m[4][3] = m[9][10] = m[10][9] =po*t[0]*t[1] +ry*t[3]*t[4] +rz*t[6]*t[7];
+	m[3][5] = m[5][3] = m[9][11] = m[11][9] =po*t[0]*t[2] +ry*t[3]*t[5] +rz*t[6]*t[8];
 	m[4][5] = m[5][4] = m[10][11] = m[11][10] =po*t[1]*t[2] +ry*t[4]*t[5] +rz*t[7]*t[8];
-	m[4][6] = m[6][4] = m[10][12] = m[12][10] =po*t[1]*t[3] +ry*t[4]*t[6] +rz*t[7]*t[9];
-	m[5][6] = m[6][5] = m[11][12] = m[12][11] =po*t[2]*t[3] +ry*t[5]*t[6] +rz*t[8]*t[9];
 	
 	return m
 	
@@ -545,7 +549,7 @@ def consistent_M(beam_props):
 	Iy 		= beam_props["Iy"]
 	Iz 		= beam_props["Iz"]
 	p 		= beam_props["p"]
-	rho     = beam_props['rho']
+	rho     = beam_props["rho"]
 
 	#initialize the output
 	m = np.zeros((12,12))
@@ -557,36 +561,36 @@ def consistent_M(beam_props):
 	rz = rho*Iz*Le
 	po = rho*Le*J
 	
-	m[1][1]  = m[7][7]   = beam_m/3.0
-	m[2][2]  = m[8][8]   = 13.0*beam_m/35.0 + 6.0*rz/(5.0*L)
-	m[3][3]  = m[9][9]   = 13.0*beam_m/35.0 + 6.0*ry/(5.0*L)
-	m[4][4]  = m[10][10] = po/3.0
-	m[5][5]  = m[11][11] = beam_m*L*L/105.0 + 2.0*L*ry/15.0
-	m[6][6]  = m[12][12] = beam_m*L*L/105.0 + 2.0*L*rz/15.0
+	m[0][0]  = m[6][6]   = beam_m/3.0
+	m[1][1]  = m[7][7]   = 13.0*beam_m/35.0 + 6.0*rz/(5.0*Le)
+	m[2][2]  = m[8][8]   = 13.0*beam_m/35.0 + 6.0*ry/(5.0*Le)
+	m[3][3]  = m[9][9] = po/3.0
+	m[4][4]  = m[10][10] = beam_m*Le*Le/105.0 + 2.0*Le*ry/15.0
+	m[5][5]  = m[11][11] = beam_m*Le*Le/105.0 + 2.0*Le*rz/15.0
 
-	m[5][3]  = m[3][5]   = -11.0*beam_m*L/210.0 - ry/10.0
-	m[6][2]  = m[2][6]   =  11.0*beam_m*L/210.0 + rz/10.0
-	m[7][1]  = m[1][7]   =  beam_m/6.0
+	m[4][2]  = m[2][4]   = -11.0*beam_m*Le/210.0 - ry/10.0
+	m[5][1]  = m[1][5]   =  11.0*beam_m*Le/210.0 + rz/10.0
+	m[6][0]  = m[0][6]   =  beam_m/6.0
 
-	m[8][6]  = m[6][8]   =  13.0*beam_m*L/420.0 - rz/10.0
-	m[9][5]  = m[5][9]   = -13.0*beam_m*L/420.0 + ry/10.0
-	m[10][4] = m[4][10]  =  po/6.0 
-	m[11][3] = m[3][11]  =  13.0*beam_m*L/420.0 - ry/10.0
-	m[12][2] = m[2][12]  = -13.0*beam_m*L/420.0 + rz/10.0
+	m[7][5]  = m[5][7]   =  13.0*beam_m*Le/420.0 - rz/10.0
+	m[8][4]  = m[4][8]   = -13.0*beam_m*Le/420.0 + ry/10.0
+	m[9][3] = m[3][9]  =  po/6.0 
+	m[10][2] = m[2][10]  =  13.0*beam_m*Le/420.0 - ry/10.0
+	m[11][1] = m[1][11]  = -13.0*beam_m*Le/420.0 + rz/10.0
 
-	m[11][9] = m[9][11]  =  11.0*beam_m*L/210.0 + ry/10.0
-	m[12][8] = m[8][12]  = -11.0*beam_m*L/210.0 - rz/10.0
+	m[10][8] = m[8][10]  =  11.0*beam_m*Le/210.0 + ry/10.0
+	m[11][7] = m[7][11]  = -11.0*beam_m*Le/210.0 - rz/10.0
 
-	m[8][2]  = m[2][8]   =  9.0*beam_m/70.0 - 6.0*rz/(5.0*L)
-	m[9][3]  = m[3][9]   =  9.0*beam_m/70.0 - 6.0*ry/(5.0*L)
-	m[11][5] = m[5][11]  = -L*L*beam_m/140.0 - ry*L/30.0
-	m[12][6] = m[6][12]  = -L*L*beam_m/140.0 - rz*L/30.0
+	m[7][1]  = m[1][7]   =  9.0*beam_m/70.0 - 6.0*rz/(5.0*Le)
+	m[8][2]  = m[2][8]   =  9.0*beam_m/70.0 - 6.0*ry/(5.0*Le)
+	m[10][4] = m[4][10]  = -Le*Le*beam_m/140.0 - ry*Le/30.0
+	m[11][5] = m[5][11]  = -Le*Le*beam_m/140.0 - rz*Le/30.0
 	
 	m = atma(t,m)
 	
-	return m
+	return [m[:6,:6],m[6:,:6],m[:6,6:],m[6:,6:]]
 
-def write_M(nodes,beam_sets,Q,global_args):
+def write_M(nodes,beam_sets,global_args):
         '''
         This function writes the stiffness matrix to an text file
         # Nodes is all the nodes
@@ -608,10 +612,11 @@ def write_M(nodes,beam_sets,Q,global_args):
 		
 	tot_dof = len(nodes)*6
         nE = sum(map(lambda x: np.shape(x[0])[0], beam_sets))
+        global_args["dof"] = tot_dof
         nodes = nodes*length_scaling
         M = co.spmatrix([],[],[],(tot_dof,tot_dof))
 	Q = co.matrix(0.0,(nE,12))
-	M = assemble_K(nodes,beam_sets,Q,global_args)
+	M = assemble_M(nodes,beam_sets,Q,global_args)
 	Mdense = np.zeros((tot_dof,tot_dof))
 
 	for i in range(0,tot_dof):
@@ -651,6 +656,7 @@ def solve_system(K,nodemap,D,forces,con_dof):
 	'''
 	#splitting the reorganized matrix up into the partially solved equations
 	[Kqq,Kqr,Krq,Krr] = [K[:spl_dex,:spl_dex],K[:spl_dex,spl_dex:],K[spl_dex:,:spl_dex],K[spl_dex:,spl_dex:]]
+        
 	#K1 = np.hsplit(K,np.array([spl_dex])) 
 	#[Kqq,Krq] = np.vsplit(K1[0],np.array([spl_dex]))
 	#[Kqr,Krr] = np.vsplit(K1[1],np.array([spl_dex]))
@@ -673,7 +679,6 @@ def solve_system(K,nodemap,D,forces,con_dof):
 	#Kqr = co.matrix(Kqr,Kqr.size)
 	Kqr_xr = Kqr*xr
 	b = fq-Kqr_xr
-	#print(b,fq,Kqr_xr,Kqq)
 	
 	try:
 		#tKqq = np.array(co.matrix(Kqq))
@@ -681,7 +686,7 @@ def solve_system(K,nodemap,D,forces,con_dof):
 		#tC = sp.linalg.cho_factor(tKqq)
 		#xq = sp.linalg.cho_solve(tC,tb)
 
-		# Sparse Solver- using the CVXOPT cholesky solver 
+		# Sparse Solver- using the CVXOPT cholesky solver
 		cholmod.linsolve(Kqq,b)
 		xq = b 
 
@@ -691,7 +696,15 @@ def solve_system(K,nodemap,D,forces,con_dof):
 		print("Warning: Cholesky did not work")
 		#If Cholesky dies (perhaps the matrix is not pos-def and symmetric)
 		#We switch over to the sad scipy solver. very slow.
-		xq = sp.linalg.solve(Kqq,fq-Kqr_xr)
+		KqqTemp = np.zeros((b.size[0],b.size[0]))
+		bTemp = np.zeros(b.size[0]);
+
+                for i in range(0,b.size[0]):
+                        for j in range(0,b.size[0]):
+                                KqqTemp[i][j] = Kqq[i*(j+1)+i]
+                        bTemp[i] = b[i]
+                        
+		xq = sp.linalg.solve(KqqTemp,bTemp)
 
 	Krq_xq = Krq*co.matrix(xq)
 	Krr_xr = Krr*xr
@@ -736,7 +749,7 @@ def assemble_loads(loads,constraints,nodes, beam_sets,global_args,tot_dof,length
 
 	#Loads from specified nodal loads
 	for load in loads:
-		forces[6*load['node']+load['DOF']] = load['value']
+		forces[int(6*load['node']+load['DOF'])] = load['value']
 
 	if np.linalg.norm(grav) > 0:
 		for beamset,args in beam_sets:
@@ -1208,6 +1221,7 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
 
 	for n in range(len(nodes)):
 		fin_node_disp[n:,] = np.array([D[n*6],D[n*6+1],D[n*6+2]])	
+
 	
 	if n_modes > 0:
 	    M = co.spmatrix([],[],[],(tot_dof,tot_dof))
@@ -1218,5 +1232,4 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
             elif global_args['m_Methods'] == 'stodola':
                 w = eig.stodola()
 
-	return w
->>>>>>> 029a410337850bf96e237f844a5af5d8754827b3
+	return fin_node_disp,C,Q
