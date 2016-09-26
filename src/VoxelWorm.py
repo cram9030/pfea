@@ -36,7 +36,7 @@ vox_pitch = 0.0762 #m
 #Setting up a 2 by 2 by 5
 size_x = 2;
 size_y = 2;
-size_z = 5;
+size_z = 4;
 
 #Temporary Material Matrix - NxNxN cubic grid (corresponding to cubic-octahedra)
 # at the moment:
@@ -60,20 +60,15 @@ node_radius = 0
 
 #STRUT PROPERTIES
 #Physical Properties
-#Assuming a ABS tube with material properties taken from:
-#http://www.plasticsintl.com/abs.htm
-#Density taken from:
-#http://www.teststandard.com/data_sheets/ABS_Data_sheet.pdf
-#and multiplied by about 2 for the glass filled
-#Poisson's Ratio from:
-#http://www.engineersedge.com/plastic/materials_common_plastic.htm
+#Assuming a Ultem1000 20% Glass Filled tube with material properties taken from:
+#https://www.plasticsintl.com/datasheets/ULTEM_GF30.pdf
 #Using Newtons, meters, and kilograms as the units
 frame_props = {"nu"  : 0.35, #poisson's ratio +
                "d1"	 : 0.00127, #m
                "d2"	 : 0.00127, #m
-               "E"   : 4000000000, #N/m^2 +
-               "G"   : 2250000000,  #N/m^2 +
-               "rho" :  1348, #kg/m^3 + density was made by assuming 20% glass # 2500 kg/m^3
+               "E"   : 6894757000, #N/m^2 +
+               "G"   : 9205282000,  #N/m^2 +
+               "rho" :  1420, #kg/m^3
                "beam_divisions" : 0,
                "cross_section"  : 'rectangular',
                "roll": 0,
@@ -87,33 +82,65 @@ node_frame_map = np.zeros((size_x,size_y,size_z,6))
 nodes,frames,node_frame_map,dims = cuboct.from_material(mat_matrix,vox_pitch)
 frame_props["Le"] = cuboct.frame_length(vox_pitch)
 
-force = .001
+force = 12
 
 #Constraint and load population
 constraints = []
 loads = []
 
-#constraints.append({'node':node_frame_map[1][1][1][1],'DOF':0, 'value':0})
-#constraints.append({'node':node_frame_map[1][1][1][1],'DOF':1, 'value':0})
-#constraints.append({'node':node_frame_map[1][1][1][1],'DOF':2, 'value':0})
-constraints.append({'node':node_frame_map[1][1][1][1],'DOF':3, 'value':0})
-constraints.append({'node':node_frame_map[1][1][1][1],'DOF':4, 'value':0})
-constraints.append({'node':node_frame_map[1][1][1][1],'DOF':5, 'value':0})
-#constraints.append({'node':node_frame_map[1][1][2][3],'DOF':3, 'value':0})
-#constraints.append({'node':node_frame_map[1][1][2][3],'DOF':4, 'value':0})
-#constraints.append({'node':node_frame_map[1][1][2][3],'DOF':5, 'value':0})
-#constraints.append({'node':node_frame_map[1][2][2][3],'DOF':3, 'value':0})
-#constraints.append({'node':node_frame_map[1][2][2][3],'DOF':4, 'value':0})
-#constraints.append({'node':node_frame_map[1][2][2][3],'DOF':5, 'value':0})
-#constraints.append({'node':node_frame_map[2][1][2][3],'DOF':4, 'value':0})
-#constraints.append({'node':node_frame_map[2][2][2][3],'DOF':5, 'value':0})
-#constraints.append({'node':node_frame_map[1][2][2][3],'DOF':3, 'value':0})
-#constraints.append({'node':node_frame_map[2][1][2][3],'DOF':4, 'value':0})
-#constraints.append({'node':node_frame_map[2][2][2][3],'DOF':5, 'value':0})
+'''Horizontal mount'''
+'''#Displacement Constraints
+constraints.append({'node':node_frame_map[1][1][2][3],'DOF':0, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][3],'DOF':1, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][3],'DOF':2, 'value':0})
+
+#Rotational Constraints
+constraints.append({'node':node_frame_map[1][1][2][3],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][3],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][3],'DOF':5, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][3],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][3],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][3],'DOF':5, 'value':0})
+constraints.append({'node':node_frame_map[1][1][3][3],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[1][1][3][3],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[1][1][3][3],'DOF':5, 'value':0})
+constraints.append({'node':node_frame_map[1][2][3][3],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[1][2][3][3],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[1][2][3][3],'DOF':5, 'value':0})
+
+#Loads
 loads.append({'node':node_frame_map[1][2][2][3],'DOF':2, 'value':force})
-loads.append({'node':node_frame_map[2][1][2][3],'DOF':2, 'value':force})
-loads.append({'node':node_frame_map[2][2][2][3],'DOF':2, 'value':force})
-loads.append({'node':node_frame_map[1][1][2][3],'DOF':2, 'value':force})
+loads.append({'node':node_frame_map[1][1][3][3],'DOF':2, 'value':force})
+loads.append({'node':node_frame_map[1][2][3][3],'DOF':2, 'value':-force})'''
+
+'''Vertical mount'''
+#Displacement Constraints
+constraints.append({'node':node_frame_map[1][1][2][5],'DOF':0, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][5],'DOF':1, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][5],'DOF':2, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][5],'DOF':0, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][5],'DOF':1, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][5],'DOF':2, 'value':0})
+
+#Rotational Constraints
+constraints.append({'node':node_frame_map[1][1][2][5],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][5],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[1][1][2][5],'DOF':5, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][5],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][5],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[1][2][2][5],'DOF':5, 'value':0})
+constraints.append({'node':node_frame_map[2][1][2][5],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[2][1][2][5],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[2][1][2][5],'DOF':5, 'value':0})
+constraints.append({'node':node_frame_map[2][2][2][5],'DOF':3, 'value':0})
+constraints.append({'node':node_frame_map[2][2][2][5],'DOF':4, 'value':0})
+constraints.append({'node':node_frame_map[2][2][2][5],'DOF':5, 'value':0})
+
+#Loads
+#loads.append({'node':node_frame_map[1][1][2][5],'DOF':1, 'value':force})
+#loads.append({'node':node_frame_map[1][2][2][5],'DOF':0, 'value':force})
+loads.append({'node':node_frame_map[2][1][2][5],'DOF':0, 'value':-force})
+loads.append({'node':node_frame_map[2][2][2][5],'DOF':0, 'value':-force})
 
 #####  ### #     #    ####### #     # ####### ######  #     # ####### 
 #       #  ##   ##    #     # #     #    #    #     # #     #    #    
@@ -150,6 +177,7 @@ if global_args["using_Frame3dd"]:
 else:
 	res_displace,C,Q = pfea.analyze_System(out_nodes, global_args, out_frames, constraints,loads)
 
-pfeautil.plotLattice(nodes,frames,res_displace,500)
+#pfeautil.plotLattice(nodes,frames,res_displace,1)
 pfea.write_K(out_nodes,out_frames,global_args)
 pfea.write_M(out_nodes,out_frames,global_args)
+pfeautil.writeCSV(nodes,res_displace,'Force12NCompression.csv')

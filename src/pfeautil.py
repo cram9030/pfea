@@ -11,6 +11,7 @@ import cvxopt as co
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
+import csv
 
 '''
 def V3(x,y,z):
@@ -126,6 +127,15 @@ def plotLattice(nodes,frames,res_displace,scale):
     ax.scatter(xs,ys,zs, color='r',alpha=0.1)
     ax.scatter(rxs,rys,rzs, color='b',alpha=0.3)
     plt.show()
+
+def writeCSV(nodes,res_displace,filename):
+    with open(filename, 'wb') as csvfile:
+        spamwriter = csv.writer(csvfile, delimiter=',',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        spamwriter.writerow(['X Start,Y Start,Z Start,X Rot,Y Rot,Z Rot,X Disp,Y Disp,Z Disp,X Rot Disp,Y Rot Disp,Z Rot Disp'])
+        for i,node in enumerate(nodes):
+            # Note that for now I have it so the rotation is always zero to intialize. I think that the current iteration of the solver has this requirement as well
+            # it might be useful to adapt this later
+            spamwriter.writerow([node[0]]+[node[1]]+[node[2]]+[0.0]+[0.0]+[0.0]+[res_displace[i][0]]+[res_displace[i][1]]+[res_displace[i][2]]+[res_displace[i][3]]+[res_displace[i][4]]+[res_displace[i][5]])
 
 def elastic_K(beam_props):
 	# beam_props is a dictionary with the following values

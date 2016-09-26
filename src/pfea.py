@@ -11,6 +11,7 @@ import numpy as np
 from pfeautil import *
 from math import *
 import scipy as sp
+import scipy.linalg as la
 import eig
 
 #The sparse solver
@@ -704,7 +705,7 @@ def solve_system(K,nodemap,D,forces,con_dof):
                                 KqqTemp[i][j] = Kqq[i*(j+1)+i]
                         bTemp[i] = b[i]
                         
-		xq = sp.linalg.solve(KqqTemp,bTemp)
+		xq = la.solve(KqqTemp,bTemp)
 
 	Krq_xq = Krq*co.matrix(xq)
 	Krr_xr = Krr*xr
@@ -1200,7 +1201,7 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
 	print(error)
 	lasterror = 1.0
 	error = 0.5
-	while np.abs(error-lasterror) > 0.01*error and error > 1e-9 and it < 10:
+	while np.abs(error-lasterror) > 0.01*error and error > 1e-9 and it < 60:
 		it = it + 1
 		
 		K = assemble_K(nodes,beam_sets,Q,global_args)
@@ -1217,10 +1218,10 @@ def analyze_System(nodes, global_args, beam_sets, constraints,loads):
 	#Part 8 Find the reaction forces
 
 	#Epilogue: Output the final node displacements.
-	fin_node_disp = np.zeros((len(nodes),3))
+	fin_node_disp = np.zeros((len(nodes),6))
 
 	for n in range(len(nodes)):
-		fin_node_disp[n:,] = np.array([D[n*6],D[n*6+1],D[n*6+2]])	
+		fin_node_disp[n:,] = np.array([D[n*6],D[n*6+1],D[n*6+2],D[n*6+3],D[n*6+4],D[n*6+5]])	
 
 	
 	if n_modes > 0:
