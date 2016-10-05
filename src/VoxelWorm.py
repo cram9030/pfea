@@ -10,6 +10,7 @@ import cProfile
 import cuboct
 from math import *
 import os
+import cvxopt as co
 
 
 ####### ######     #    #     # ####### 
@@ -178,6 +179,6 @@ else:
 	res_displace,C,Q = pfea.analyze_System(out_nodes, global_args, out_frames, constraints,loads)
 
 #pfeautil.plotLattice(nodes,frames,res_displace,1)
-pfea.write_K(out_nodes,out_frames,global_args)
-pfea.write_M(out_nodes,out_frames,global_args)
+pfea.write_K(out_nodes,out_frames,global_args,'K.txt')
+pfea.write_M(out_nodes,out_frames,global_args,'M.txt')
 pfeautil.writeCSV(nodes,res_displace,'Force12NCompression.csv')

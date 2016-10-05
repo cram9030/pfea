@@ -340,7 +340,7 @@ def pop_k(beam_props):
 
 	return data,rows,cols
 
-def write_K(nodes,beam_sets,global_args):
+def write_K(nodes,beam_sets,global_args,filename):
         '''
         This function writes the stiffness matrix to an text file
         # Nodes is all the nodes
@@ -371,9 +371,9 @@ def write_K(nodes,beam_sets,global_args):
 
 	for i in range(0,tot_dof):
                 for j in range(0,tot_dof):
-                        Kdense[i][j] = K[i*(j+1)+i]
+                        Kdense[i][j] = K[i*(j+1)+j]
 
-        np.savetxt('K.txt',Kdense,delimiter=',')
+        np.savetxt(filename,Kdense,delimiter=',')
 
 #     #      #     #    #    ####### ######  ### #     # 
 ##   ##      ##   ##   # #      #    #     #  #   #   #  
@@ -591,7 +591,7 @@ def consistent_M(beam_props):
 	
 	return [m[:6,:6],m[6:,:6],m[:6,6:],m[6:,6:]]
 
-def write_M(nodes,beam_sets,global_args):
+def write_M(nodes,beam_sets,global_args,filename):
         '''
         This function writes the stiffness matrix to an text file
         # Nodes is all the nodes
@@ -622,9 +622,9 @@ def write_M(nodes,beam_sets,global_args):
 
 	for i in range(0,tot_dof):
                 for j in range(0,tot_dof):
-                        Mdense[i][j] = M[i*(j+1)+i]
+                        Mdense[i][j] = M[i*(j+1)+j]
 
-        np.savetxt('M.txt',Mdense,delimiter=',')
+        np.savetxt(filename,Mdense,delimiter=',')
 
  #####  ####### #       #     # ####### ######  
 #     # #     # #       #     # #       #     # 

@@ -327,7 +327,7 @@ def writeMatrices(nodes,beam_sets,Q,args):
 			beam_props["xn1"] = xn1
 			beam_props["xn2"] = xn2
 			
-			beam_props["T"]	  = -Q[q_index][0]
+			beam_props["T"]	  = -Q[q_index,0]
 			q_index = q_index+1
 			ke = elastic_K(beam_props)
 			kg = geometric_K(beam_props)
@@ -349,7 +349,7 @@ def writeMatrices(nodes,beam_sets,Q,args):
 			M[6*beam[0]:6*beam[0]+6,6*beam[1]:6*beam[1]+6] += m[0:6,6:12]
 			M[6*beam[1]:6*beam[1]+6,6*beam[1]:6*beam[1]+6] += m[6:12,6:12]
 	
-	np.savetxt('K.txt',K, delimiter=',')
+	np.savetxt('KpfeaUtil.txt',K, delimiter=',')
 	np.savetxt('M.txt',M, delimiter=',')
 
 def coord_trans(x_n1,x_n2,L,p):
